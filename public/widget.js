@@ -185,23 +185,7 @@
     return true;
   }
 
-    // Se o script antigo NÃO existe, cria o painel do zero
-    const anchor=findAnchor();if(!anchor)return false;
-    const found=findSectionContent(anchor);if(!found)return false;
 
-    const panel=document.createElement('div');panel.id='brk-widget-wrap';
-
-    visible.forEach(btn=>{
-      const el=document.createElement('button');el.type='button';el.className='brk-btn';
-      el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
-      if(btn.description)el.title=btn.description;
-      el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
-      panel.appendChild(el);
-    });
-
-    found.content.insertBefore(panel,found.content.firstChild);
-    return true;
-  }
 
   // ── Init ──
   async function init(){
