@@ -1,0 +1,150 @@
+<!-- CARREGA O WIDGET DO SERVIDOR (Botões, Lógicas e API) -->
+<script src="https://n8n-brk-buttons.pqcilq.easypanel.host/widget.js"></script>
+
+<!-- MÓDULO ADMIN SETTINGS (Menu no Chatwoot) -->
+<script>
+(function() {
+    'use strict';
+    const URL_CONSTRUTOR = 'https://n8n-brk-buttons.pqcilq.easypanel.host';
+    let isPanelOpen = false;
+    let lastUrl = location.href;
+
+    function injectCss() {
+        if (document.getElementById('brk-mgr-css')) return;
+        const css = document.createElement('style');
+        css.id = 'brk-mgr-css';
+        css.textContent = `
+            #brk-mgr-panel { position: fixed; top: 0; right: 0; bottom: 0; background: var(--white, #fff); z-index: 100; display: none; flex-direction: column; } 
+            #brk-mgr-panel.visible { display: flex; } 
+            html.dark #brk-mgr-panel, body.dark #brk-mgr-panel { background: #1f2937; } 
+            #brk-mgr-iframe { width: 100%; height: 100%; border: none; display: block; background: transparent; }
+        `;
+        document.head.appendChild(css);
+    }
+
+    function getSidebarWidth() {
+        const asideSettings = document.querySelector('.settings-wrap aside, div[class*="settings"] aside');
+        const asideMain = document.querySelector('aside');
+        const target = asideSettings || asideMain;
+        return target ? target.getBoundingClientRect().right : 200;
+    }
+
+    function createPanel() {
+        if (document.getElementById('brk-mgr-panel')) return;
+        const panel = document.createElement('div');
+        panel.id = 'brk-mgr-panel';
+        panel.innerHTML = `<iframe id="brk-mgr-iframe" src="about:blank"></iframe>`;
+        document.body.appendChild(panel);
+    }
+
+    function getAuthToken() {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.startsWith('cw_d_session_info=')) {
+                try { return JSON.parse(decodeURIComponent(cookie.substring('cw_d_session_info='.length))); } catch (e) {}
+            }
+        }
+        return null;
+    }
+
+    async function checkIsAdmin() {
+        const auth = getAuthToken();
+        if (!auth || !auth['access-token']) return false;
+        try {
+            const res = await fetch('/api/v1/profile', { headers: { 'access-token': auth['access-token'], 'client': auth['client'], 'uid': auth['uid'] } });
+            if (!res.ok) return false;
+            const data = await res.json();
+            return data.role === 'administrator' || data.type === 'SuperAdmin';
+        } catch (err) { return false; }
+    }
+
+    window.brkMgrOpen = function() {
+        isPanelOpen = true;
+        const panel = document.getElementById('brk-mgr-panel');
+        const iframe = document.getElementById('brk-mgr-iframe');
+        panel.style.left = getSidebarWidth() + 'px';
+        iframe.src = URL_CONSTRUTOR;
+        panel.classList.add('visible');
+    };
+
+    window.brkMgrClose = function() {
+        isPanelOpen = false;
+        const panel = document.getElementById('brk-mgr-panel');
+        const iframe = document.getElementById('brk-mgr-iframe');
+        if(panel) panel.classList.remove('visible');
+        if(iframe) iframe.src = 'about:blank';
+    };
+
+    window.brkMgrToggle = function() { isPanelOpen ? window.brkMgrClose() : window.brkMgrOpen(); };
+
+    function setupNavObserver() {
+        const closeOnNav = () => { if (isPanelOpen && location.href !== lastUrl) window.brkMgrClose(); lastUrl = location.href; };
+        window.addEventListener('popstate', closeOnNav);
+        const origPush = history.pushState; const origReplace = history.replaceState;
+        history.pushState = function() { origPush.apply(this, arguments); closeOnNav(); };
+        history.replaceState = function() { origReplace.apply(this, arguments); closeOnNav(); };
+    }
+
+    function injectIntoSettingsMenu() {
+        if (!location.pathname.includes('/settings')) return;
+        if (document.getElementById('brk-mgr-settings-item')) return;
+
+        const links = Array.from(document.querySelectorAll('a[href*="/settings/"]'));
+        if (links.length === 0) return;
+        const refLink = links.find(l => !l.classList.contains('active') && !l.getAttribute('aria-current')) || links[0];
+        if (!refLink) return;
+
+        const container = refLink.parentElement.tagName === 'LI' ? refLink.parentElement.parentElement : refLink.parentElement;
+
+        const myItem = refLink.cloneNode(true);
+        myItem.id = 'brk-mgr-settings-item';
+        myItem.href = '#';
+        myItem.classList.remove('active', 'font-semibold', 'bg-n-slate-2', 'dark:bg-n-solid-3', 'text-n-brand-600', 'dark:text-n-brand-500');
+        myItem.style.cursor = 'pointer';
+
+        const span = Array.from(myItem.querySelectorAll('*')).find(s => s.childNodes.length === 1 && s.textContent.trim().length > 2);
+        if (span) span.textContent = 'Construtor de Botões';
+        
+        const svg = myItem.querySelector('svg');
+        if (svg) svg.innerHTML = '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>';
+        
+        myItem.onclick = function(e) { e.preventDefault(); window.brkMgrToggle(); };
+
+        if (refLink.parentElement.tagName === 'LI') {
+            const li = document.createElement('li'); li.className = refLink.parentElement.className; li.appendChild(myItem); container.appendChild(li);
+        } else { container.appendChild(myItem); }
+    }
+
+    window.addEventListener('message', async function(e) {
+        if (e.data && e.data.action === 'GET_AGENTS') {
+            const auth = getAuthToken();
+            if (!auth) return;
+            try {
+                const accountMatch = location.pathname.match(/accounts\\/(\\d+)/);
+                const accountId = accountMatch ? accountMatch[1] : 1;
+                const res = await fetch('/api/v1/accounts/' + accountId + '/agents', {
+                    headers: { 'access-token': auth['access-token'], 'client': auth['client'], 'uid': auth['uid'] }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const iframe = document.getElementById('brk-mgr-iframe');
+                    if (iframe && iframe.contentWindow) {
+                        iframe.contentWindow.postMessage({ action: 'SET_AGENTS', agents: data }, '*');
+                    }
+                }
+            } catch (err) { console.error('Erro ao buscar agentes:', err); }
+        }
+    });
+
+    async function init() {
+        const isAdmin = await checkIsAdmin();
+        if (!isAdmin) return; 
+        injectCss(); createPanel(); setupNavObserver();
+        setInterval(injectIntoSettingsMenu, 1000);
+    }
+    
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else setTimeout(init, 500);
+})();
+</script>
