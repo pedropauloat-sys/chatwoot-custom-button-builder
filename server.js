@@ -38,6 +38,13 @@ async function initDB() {
       name TEXT NOT NULL UNIQUE,
       sort_order INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS brk_button_clicks (
+      id SERIAL PRIMARY KEY,
+      button_id TEXT NOT NULL,
+      user_email TEXT DEFAULT '',
+      clicked_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
   console.log('[DB] Tables ready');
 }
@@ -147,6 +154,52 @@ async function handleAPI(req, res, url, method) {
     const { name } = await parseBody(req);
     await pool.query('INSERT INTO brk_button_groups (name) VALUES ($1) ON CONFLICT DO NOTHING', [name]);
     return json(res, { success: true });
+  }
+
+  // POST /api/analytics/click
+  if (url === '/api/analytics/click' && method === 'POST') {
+    const { button_id, user_email } = await parseBody(req);
+    if (!button_id) return json(res, { error: 'Missing button_id' }, 400);
+    pool.query('INSERT INTO brk_button_clicks (button_id, user_email) VALUES ($1, $2)', [button_id, user_email || '']).catch(console.error);
+    return json(res, { success: true });
+  }
+
+  // GET /api/analytics/stats
+  if (url === '/api/analytics/stats' && method === 'GET') {
+    try {
+      const totalAll = await pool.query('SELECT COUNT(*) FROM brk_button_clicks');
+      const totalMonth = await pool.query("SELECT COUNT(*) FROM brk_button_clicks WHERE clicked_at >= date_trunc('month', CURRENT_DATE)");
+      const totalToday = await pool.query('SELECT COUNT(*) FROM brk_button_clicks WHERE clicked_at >= CURRENT_DATE');
+      
+      const topButtons = await pool.query(`
+        SELECT c.button_id, b.label, b.icon, COUNT(*) as clicks
+        FROM brk_button_clicks c
+        LEFT JOIN brk_buttons b ON c.button_id = b.id
+        GROUP BY c.button_id, b.label, b.icon
+        ORDER BY clicks DESC LIMIT 10
+      `);
+
+      const topUsers = await pool.query(`
+        SELECT user_email, COUNT(*) as clicks
+        FROM brk_button_clicks
+        WHERE user_email != ''
+        GROUP BY user_email
+        ORDER BY clicks DESC LIMIT 10
+      `);
+
+      return json(res, {
+        totals: {
+          all: parseInt(totalAll.rows[0].count),
+          month: parseInt(totalMonth.rows[0].count),
+          today: parseInt(totalToday.rows[0].count)
+        },
+        buttons: topButtons.rows,
+        users: topUsers.rows
+      });
+    } catch (err) {
+      console.error(err);
+      return json(res, { error: 'Failed' }, 500);
+    }
   }
 
   // GET /widget.js — script que injeta botões no Chatwoot

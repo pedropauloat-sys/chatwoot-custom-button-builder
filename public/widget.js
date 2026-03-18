@@ -164,6 +164,13 @@
   // EXECUTAR AÇÃO DO BOTÃO
   // ══════════════════════════════════════════════════════════════
   async function executeAction(btn){
+    // Analytics (Fire and forget)
+    fetch(API_BASE+'/api/analytics/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ button_id: btn.id, user_email: window.__brkCurrentUserEmail || '' })
+    }).catch(e => console.error('[BRK Analytics Error]', e));
+
     if(btn.action_type==='link'){
       if(btn.new_tab!==false)window.open(btn.action_url,'_blank');
       else location.href=btn.action_url;
