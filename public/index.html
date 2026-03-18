@@ -295,6 +295,7 @@ function syncForm() {
   if (activeTab === 'exibicao') {
     editBtn.dynamic = c('f-dynamic');
     editBtn.single_use = c('f-single');
+    editBtn.group_name = v('f-group') || '';
   }
 }
 
@@ -384,6 +385,16 @@ function renderExibicao(body) {
   var b = editBtn;
   var usersHTML = '';
 
+  var groupSet = {};
+  for(var g=0; g<buttons.length; g++){
+    if(buttons[g].group_name) groupSet[buttons[g].group_name] = true;
+  }
+  var groupsHTML = '<datalist id="groups-list">';
+  for(var gname in groupSet){
+    groupsHTML += '<option value="'+gname+'"></option>';
+  }
+  groupsHTML += '</datalist>';
+
   if (!b.visible_to || !b.visible_to.length) {
     usersHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--sub);background:var(--bg3);border-radius:8px;border:1px dashed var(--border)">👁 Visível para todos</div>';
   } else {
@@ -394,6 +405,7 @@ function renderExibicao(body) {
   }
 
   body.innerHTML =
+    '<div class="form-group"><label class="form-label">Grupo / Pasta (Opcional)</label><input list="groups-list" class="form-input" id="f-group" value="' + (b.group_name||'') + '" placeholder="Ex: Vendas, Suporte...">' + groupsHTML + '<div class="form-hint">Botões com o mesmo grupo ficam juntos.</div></div>' +
     '<div class="checkbox-item"><input type="checkbox" id="f-dynamic"' + (b.dynamic?' checked':'') + '><div><label for="f-dynamic">Botão dinâmico</label><div class="hint">Ocultado por padrão, aparece via triggers</div></div></div>' +
     '<div class="checkbox-item"><input type="checkbox" id="f-single"' + (b.single_use?' checked':'') + '><div><label for="f-single">Botão de uso único</label><div class="hint">Desativa após o primeiro clique</div></div></div>' +
     '<div style="margin-top:16px"><label class="form-label">Exibir para (vazio = todos)</label></div>' +

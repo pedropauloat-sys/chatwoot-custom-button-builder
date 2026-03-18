@@ -244,13 +244,35 @@
         wrap=document.createElement('div');
         wrap.id='brk-widget-wrap';
         wrap.style.cssText='border-top:1px solid rgba(255,255,255,.06);margin-top:2px;padding-top:2px;';
-        visible.forEach(btn=>{
+        const grouped = {};
+        const noGroup = [];
+        visible.forEach(btn => {
+          const g = (btn.group_name || '').trim();
+          if (!g) noGroup.push(btn);
+          else { if (!grouped[g]) grouped[g] = []; grouped[g].push(btn); }
+        });
+
+        const createBtnEl = (btn) => {
           const el=document.createElement('button');el.type='button';el.className='brk-btn';
           el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
           if(btn.description)el.title=btn.description;
           el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
-          wrap.appendChild(el);
-        });
+          return el;
+        };
+
+        const renderGrp = (title, btns) => {
+          if (!btns.length) return;
+          if (title) {
+            const h = document.createElement('div');
+            h.style.cssText = `font-size:11px;font-weight:700;padding:12px 4px 4px 4px;color:${isDark()?'#8b95a5':'#64748b'};text-transform:uppercase;letter-spacing:0.04em;`;
+            h.textContent = title;
+            wrap.appendChild(h);
+          }
+          btns.forEach(btn => wrap.appendChild(createBtnEl(btn)));
+        };
+
+        renderGrp(null, noGroup);
+        Object.keys(grouped).forEach(g => renderGrp(g, grouped[g]));
         existingPanel.after(wrap);
         return true;
       }
@@ -292,13 +314,36 @@
     `;
 
     const content = accordion.querySelector('#brk-w-content');
-    visible.forEach(btn=>{
+    
+    const grouped = {};
+    const noGroup = [];
+    visible.forEach(btn => {
+      const g = (btn.group_name || '').trim();
+      if (!g) noGroup.push(btn);
+      else { if (!grouped[g]) grouped[g] = []; grouped[g].push(btn); }
+    });
+
+    const createBtnEl = (btn) => {
       const el=document.createElement('button');el.type='button';el.className='brk-btn';
       el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
       if(btn.description)el.title=btn.description;
       el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
-      content.appendChild(el);
-    });
+      return el;
+    };
+
+    const renderGrp = (title, btns) => {
+      if (!btns.length) return;
+      if (title) {
+        const h = document.createElement('div');
+        h.style.cssText = `font-size:11px;font-weight:700;padding:12px 0 4px 4px;color:${isDark()?'#8b95a5':'#64748b'};text-transform:uppercase;letter-spacing:0.04em;`;
+        h.textContent = title;
+        content.appendChild(h);
+      }
+      btns.forEach(btn => content.appendChild(createBtnEl(btn)));
+    };
+
+    renderGrp(null, noGroup);
+    Object.keys(grouped).forEach(g => renderGrp(g, grouped[g]));
 
     blocoAcoes.parentElement.insertBefore(accordion, blocoAcoes);
 
