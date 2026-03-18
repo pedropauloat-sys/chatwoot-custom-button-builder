@@ -221,7 +221,14 @@
       document.getElementById('brk-widget-wrap')?.remove();
       return false;
     }
-    const visible=cachedButtons.filter(b=>!b.visible_to||!b.visible_to.length||b.visible_to.length===0);
+    
+    // Filtra botões visíveis para o usuário atual
+    const visible = cachedButtons.filter(b => {
+      if (!b.visible_to || b.visible_to.length === 0) return true; // Todos
+      if (!window.__brkCurrentUserEmail) return false; // Se tiver restrição mas não soubermos quem é, esconde
+      return b.visible_to.includes(window.__brkCurrentUserEmail);
+    });
+
     if(!visible.length) {
       document.getElementById('brk-widget-wrap')?.remove();
       return false;
@@ -310,9 +317,46 @@
   }
 
   // ══════════════════════════════════════════════════════════════
+  // CURRENT USER DATA
+  // ══════════════════════════════════════════════════════════════
+  function getAuthToken() {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.startsWith('cw_d_session_info=')) {
+            try { return JSON.parse(decodeURIComponent(cookie.substring('cw_d_session_info='.length))); } catch (e) {}
+        }
+    }
+    return null;
+  }
+
+  async function fetchCurrentUserEmail() {
+    if (window.__brkCurrentUserEmail) return window.__brkCurrentUserEmail;
+    const auth = getAuthToken();
+    if (!auth || !auth['access-token']) {
+      // Tenta pegar da store do Vue, caso o cookie não exista e seja localStorage
+      const ls = localStorage.getItem('auth');
+      if (ls) {
+        try {
+          const email = JSON.parse(ls).currentUser?.email;
+          if (email) return email.toLowerCase();
+        } catch(e){}
+      }
+      return null;
+    }
+    try {
+        const res = await fetch('/api/v1/profile', { headers: { 'access-token': auth['access-token'], 'client': auth['client'], 'uid': auth['uid'] } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.email ? data.email.toLowerCase() : null;
+    } catch (err) { return null; }
+  }
+
+  // ══════════════════════════════════════════════════════════════
   // INIT
   // ══════════════════════════════════════════════════════════════
   async function init(){
+    window.__brkCurrentUserEmail = await fetchCurrentUserEmail();
     await fetchButtons();
 
     setTimeout(()=>{
