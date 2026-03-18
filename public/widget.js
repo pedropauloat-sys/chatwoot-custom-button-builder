@@ -88,24 +88,25 @@
   }
 
   // ── Localização no sidebar ──
-  function findAnchor(){
-    for(const el of document.querySelectorAll('span,div,p,h3,h4,strong')){
-      const t=(el.textContent||'').trim().toLowerCase();
-      if(t==='ações da conversa'||t==='conversation actions')return el;
-    }return null;
-  }
-  function findAgentField(){
-    for(const el of document.querySelectorAll('span,div,p,label,h6')){
-      const t=(el.textContent||'').trim().toLowerCase();
-      if(t==='agente atribuído'||t==='assigned agent'||t==='agente atribuido')return el;
-    }return null;
-  }
-  function findSectionContent(anchor){
-    if(!anchor)return null;
-    const agentEl=findAgentField();if(!agentEl)return null;
-    let node=agentEl;
-    for(let d=0;d<15;d++){node=node.parentElement;if(!node||node===document.body)break;const p=node.parentElement;if(!p)continue;if(p.contains(anchor)&&!node.contains(anchor))return{content:node}}
-    let h=anchor;for(let i=0;i<8;i++){const s=h.nextElementSibling;if(s&&s.querySelector&&!s.textContent.includes('Macros'))return{content:s};h=h.parentElement;if(!h)break}
+  function findBlocoAcoes() {
+    const textos = document.querySelectorAll('span,div,p,h3,h4,strong');
+    for (let i = 0; i < textos.length; i++) {
+        const t = (textos[i].textContent||'').trim().toLowerCase();
+        if ((t === 'ações da conversa' || t === 'conversation actions') && textos[i].children.length === 0) {
+            let parent = textos[i].parentElement;
+            for (let j = 0; j < 6; j++) {
+                if (parent) {
+                    if (parent.classList.contains('border-b') || parent.tagName === 'SECTION' || parent.classList.contains('mb-4') || parent.style.borderRadius) {
+                        return parent;
+                    }
+                    parent = parent.parentElement;
+                }
+            }
+            if (textos[i].parentElement && textos[i].parentElement.parentElement) {
+                return textos[i].parentElement.parentElement.parentElement;
+            }
+        }
+    }
     return null;
   }
 
@@ -113,36 +114,76 @@
   function renderButtons(){
     injectCSS();
 
-    // Remove widget antigo se existir
     document.getElementById('brk-widget-wrap')?.remove();
-
     if(!cachedButtons.length)return false;
-
-    // Filtra visibilidade (vazio = todos)
     const visible=cachedButtons.filter(b=>!b.visible_to||!b.visible_to.length||b.visible_to.length===0);
     if(!visible.length)return false;
 
-    // Espera o script antigo injetar primeiro (brk-tools-right)
-    const existingPanel=document.getElementById('brk-tools-right');
-
-    if(existingPanel){
-      // O script antigo já injetou — adiciona os botões NOVOS abaixo do painel existente
-      const wrap=document.createElement('div');
-      wrap.id='brk-widget-wrap';
-      wrap.style.cssText='border-top:1px solid rgba(255,255,255,.06);margin-top:2px;padding-top:2px;';
-
-      visible.forEach(btn=>{
-        const el=document.createElement('button');el.type='button';el.className='brk-btn';
-        el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
-        if(btn.description)el.title=btn.description;
-        el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
-        wrap.appendChild(el);
-      });
-
-      // Insere depois do painel existente
-      existingPanel.after(wrap);
-      return true;
+    if(window.__BRK_SCRIPT3_V4__){
+      const existingPanel=document.getElementById('brk-tools-right');
+      if(existingPanel){
+        const wrap=document.createElement('div');
+        wrap.id='brk-widget-wrap';
+        wrap.style.cssText='border-top:1px solid rgba(255,255,255,.06);margin-top:2px;padding-top:2px;';
+        visible.forEach(btn=>{
+          const el=document.createElement('button');el.type='button';el.className='brk-btn';
+          el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
+          if(btn.description)el.title=btn.description;
+          el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
+          wrap.appendChild(el);
+        });
+        existingPanel.after(wrap);
+        return true;
+      }
+      return false; // Wait for the main script to render existingPanel
     }
+
+    const blocoAcoes = findBlocoAcoes();
+    if(!blocoAcoes || !blocoAcoes.parentElement) return false;
+
+    const accordion = document.createElement('div');
+    accordion.id = 'brk-widget-wrap';
+    accordion.style.cssText = 'margin-bottom: 8px; border-radius: 8px; border: 1px solid #eaeaea; background: #f9f9fb; overflow: hidden;';
+    
+    if (isDark()) {
+        accordion.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+        accordion.style.background = 'rgb(24, 25, 27)';
+    }
+
+    accordion.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; user-select: none;" id="brk-w-toggle">
+            <h4 style="font-weight: 500; font-size: 14px; color: ${isDark() ? '#f1f5f9' : '#1f2d3d'}; margin: 0; font-family: inherit;">Botões Cadastrados</h4>
+            <div style="display: flex; align-items: center; justify-content: center; color: #1f93ff;" id="brk-w-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+            </div>
+        </div>
+        <div style="padding: 0 14px 12px 14px;" id="brk-w-content"></div>
+    `;
+
+    const content = accordion.querySelector('#brk-w-content');
+    visible.forEach(btn=>{
+      const el=document.createElement('button');el.type='button';el.className='brk-btn';
+      el.innerHTML=`<span class="brk-ic">${btn.icon||'🔘'}</span><span>${btn.label||'Botão'}</span>`;
+      if(btn.description)el.title=btn.description;
+      el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();executeAction(btn)});
+      content.appendChild(el);
+    });
+
+    blocoAcoes.parentElement.insertBefore(accordion, blocoAcoes);
+
+    accordion.querySelector('#brk-w-toggle').addEventListener('click', () => {
+        const ic = accordion.querySelector('#brk-w-icon');
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            ic.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>`;
+        } else {
+            content.style.display = 'none';
+            ic.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;
+        }
+    });
+
+    return true;
+  }
 
     // Se o script antigo NÃO existe, cria o painel do zero
     const anchor=findAnchor();if(!anchor)return false;
