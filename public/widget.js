@@ -92,21 +92,25 @@
     const textos = document.querySelectorAll('span,div,p,h3,h4,strong');
     for (let i = 0; i < textos.length; i++) {
         const t = (textos[i].textContent||'').trim().toLowerCase();
-        if ((t === 'ações da conversa' || t === 'conversation actions') && textos[i].children.length === 0) {
+        if ((t === 'ações da conversa' || t === 'conversation actions')) {
+            console.log('[BRK Widget] Encontrou texto:', t, textos[i]);
             let parent = textos[i].parentElement;
             for (let j = 0; j < 6; j++) {
                 if (parent) {
                     if (parent.classList.contains('border-b') || parent.tagName === 'SECTION' || parent.classList.contains('mb-4') || parent.style.borderRadius) {
+                        console.log('[BRK Widget] Encontrou bloco container:', parent);
                         return parent;
                     }
                     parent = parent.parentElement;
                 }
             }
             if (textos[i].parentElement && textos[i].parentElement.parentElement) {
+                console.log('[BRK Widget] Retornando fallback container:', textos[i].parentElement.parentElement.parentElement);
                 return textos[i].parentElement.parentElement.parentElement;
             }
         }
     }
+    console.log('[BRK Widget] findBlocoAcoes falhou em encontrar Ações da conversa');
     return null;
   }
 
@@ -115,13 +119,21 @@
     injectCSS();
 
     document.getElementById('brk-widget-wrap')?.remove();
-    if(!cachedButtons.length)return false;
+    if(!cachedButtons.length) {
+      console.log('[BRK Widget] renderButtons abortado: sem botões cacheados');
+      return false;
+    }
     const visible=cachedButtons.filter(b=>!b.visible_to||!b.visible_to.length||b.visible_to.length===0);
-    if(!visible.length)return false;
+    if(!visible.length) {
+      console.log('[BRK Widget] renderButtons abortado: botões cacheados mas nenhum visível');
+      return false;
+    }
 
     if(window.__BRK_SCRIPT3_V4__){
+      console.log('[BRK Widget] detectado window.__BRK_SCRIPT3_V4__ verdadeiro');
       const existingPanel=document.getElementById('brk-tools-right');
       if(existingPanel){
+        console.log('[BRK Widget] existingPanel (brk-tools-right) encontrado, inserindo no painel');
         const wrap=document.createElement('div');
         wrap.id='brk-widget-wrap';
         wrap.style.cssText='border-top:1px solid rgba(255,255,255,.06);margin-top:2px;padding-top:2px;';
@@ -135,11 +147,16 @@
         existingPanel.after(wrap);
         return true;
       }
+      console.log('[BRK Widget] Aguardando brk-tools-right ser criado pelo script principal...');
       return false; // Wait for the main script to render existingPanel
     }
 
     const blocoAcoes = findBlocoAcoes();
-    if(!blocoAcoes || !blocoAcoes.parentElement) return false;
+    if(!blocoAcoes || !blocoAcoes.parentElement) {
+      console.log('[BRK Widget] blocoAcoes não encontrado ou sem pai', blocoAcoes);
+      return false;
+    }
+    console.log('[BRK Widget] Inserindo accordion antes do blocoAcoes');
 
     const accordion = document.createElement('div');
     accordion.id = 'brk-widget-wrap';
