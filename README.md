@@ -115,12 +115,5 @@ brk-button-manager/
 
 ---
 
-## 📝 Licença
 
-Este projeto é de uso interno da **BRK / UsesBRK**. Todos os direitos reservados.
-
----
-
-<div align="center">
-  Desenvolvido com ❤️ para otimizar a operação de atendimento da BRK.
 </div>
