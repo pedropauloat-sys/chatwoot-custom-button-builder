@@ -232,8 +232,22 @@
     // Filtra botões visíveis para o usuário atual
     const visible = cachedButtons.filter(b => {
       if (!b.visible_to || b.visible_to.length === 0) return true; // Todos
-      if (!window.__brkCurrentUserEmail) return false; // Se tiver restrição mas não soubermos quem é, esconde
-      return b.visible_to.includes(window.__brkCurrentUserEmail);
+      
+      // Checa se o email do usuário logado está na lista
+      const emailMatch = window.__brkCurrentUserEmail && b.visible_to.includes(window.__brkCurrentUserEmail);
+      if (emailMatch) return true;
+      
+      // Checa times/grupos, caso o array de times do usuário tenha sido populado no Chatwoot (window.__brkCurrentUserTeams)
+      const userTeams = window.__brkCurrentUserTeams || [];
+      const teamMatch = b.visible_to.some(val => {
+        if (val.startsWith('team:')) {
+           const teamName = val.substring(5).toLowerCase();
+           return userTeams.some(ut => ut.toLowerCase() === teamName);
+        }
+        return false;
+      });
+      
+      return teamMatch;
     });
 
     if(!visible.length) {

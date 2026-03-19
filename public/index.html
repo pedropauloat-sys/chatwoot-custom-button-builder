@@ -52,6 +52,11 @@
   .checkbox-item{display:flex;gap:10px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer}
   .checkbox-item label{font-size:13px;font-weight:600;cursor:pointer}
   .checkbox-item .hint{font-size:11px;color:var(--sub);margin-top:2px}
+  .perm-item{display:inline-flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:4px 8px 4px 4px;margin:0 6px 6px 0;font-size:13px}
+  .perm-avatar{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+  .perm-avatar.team{background:var(--success)}
+  .perm-remove{background:transparent;border:none;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;width:18px;height:18px;transition:all .15s}
+  .perm-remove:hover{background:var(--danger);color:#fff}
   .user-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg3);border-radius:6px;border:1px solid var(--border);margin-bottom:4px}
   .user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
   .footer-count{font-size:11px;color:var(--sub)}
@@ -482,10 +487,16 @@ function renderExibicao(body) {
   if (!b.visible_to || !b.visible_to.length) {
     usersHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--sub);background:var(--bg3);border-radius:8px;border:1px dashed var(--border)">👁 Visível para todos</div>';
   } else {
+    usersHTML = '<div style="display:flex;flex-wrap:wrap;">';
     for (var i = 0; i < b.visible_to.length; i++) {
-      var email = b.visible_to[i];
-      usersHTML += '<div class="user-item"><div style="display:flex;align-items:center;gap:8px"><div class="user-avatar">' + email.substring(0,2).toUpperCase() + '</div><span style="font-size:13px">' + email + '</span></div><button class="btn-icon" style="color:var(--danger)" data-user-del="' + i + '">✕</button></div>';
+      var val = b.visible_to[i];
+      var isTeam = val.startsWith('team:');
+      var displayName = isTeam ? val.substring(5) : val;
+      var iconStr = isTeam ? '👥' : displayName.substring(0,2).toUpperCase();
+      var avatarClass = isTeam ? 'perm-avatar team' : 'perm-avatar';
+      usersHTML += '<div class="perm-item"><div class="' + avatarClass + '" style="font-size:'+(isTeam?'12px':'10px')+'">' + iconStr + '</div><span>' + displayName + '</span><button class="perm-remove" data-user-del="' + i + '">✕</button></div>';
     }
+    usersHTML += '</div>';
   }
 
   body.innerHTML =
@@ -493,19 +504,53 @@ function renderExibicao(body) {
     '<div class="checkbox-item"><input type="checkbox" id="f-dynamic"' + (b.dynamic?' checked':'') + '><div><label for="f-dynamic">Botão dinâmico</label><div class="hint">Ocultado por padrão, aparece via triggers</div></div></div>' +
     '<div class="checkbox-item"><input type="checkbox" id="f-single"' + (b.single_use?' checked':'') + '><div><label for="f-single">Botão de uso único</label><div class="hint">Desativa após o primeiro clique</div></div></div>' +
     '<div style="margin-top:16px"><label class="form-label">Exibir para (vazio = todos)</label></div>' +
-    '<div style="display:flex;gap:8px;margin-bottom:12px"><input class="form-input" id="f-email" placeholder="nome@usebrk.com.br" style="flex:1"><button class="btn btn-primary" id="btn-add-user">+ Adicionar</button></div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+      '<select class="form-select" id="f-perm-type" style="width: 110px;"><option value="user">Usuário</option><option value="team">Time</option></select>' +
+      '<input class="form-input" id="f-email" placeholder="nome@usebrk.com.br" style="flex:1">' +
+      '<input class="form-input hidden" id="f-team" placeholder="Nome do time (ex: vendas)" style="flex:1">' +
+      '<button class="btn btn-primary" id="btn-add-user">+ Adicionar</button>' +
+    '</div>' +
     '<div id="users-list">' + usersHTML + '</div>';
 
+  var permTypeSelect = document.getElementById('f-perm-type');
+  var fTeam = document.getElementById('f-team');
   var addUserBtn = document.getElementById('btn-add-user');
-  if (addUserBtn) addUserBtn.addEventListener('click', function() {
-    var inp = document.getElementById('f-email');
-    var val = inp.value.trim().toLowerCase();
-    if (val && editBtn.visible_to.indexOf(val) === -1) {
-      editBtn.visible_to.push(val);
-      inp.value = '';
-      renderTab();
-    }
-  });
+
+  if (permTypeSelect) {
+    permTypeSelect.addEventListener('change', function(e) {
+      var currentEmailField = document.getElementById('f-email');
+      if (e.target.value === 'team') {
+        if (currentEmailField) currentEmailField.classList.add('hidden');
+        fTeam.classList.remove('hidden');
+      } else {
+        if (currentEmailField) currentEmailField.classList.remove('hidden');
+        fTeam.classList.add('hidden');
+      }
+    });
+  }
+
+  if (addUserBtn) {
+    addUserBtn.addEventListener('click', function() {
+      var type = permTypeSelect ? permTypeSelect.value : 'user';
+      var currentEmailField = document.getElementById('f-email');
+      var val = '';
+      
+      if (type === 'team') {
+        val = fTeam.value.trim().toLowerCase();
+        if (val && !val.startsWith('team:')) val = 'team:' + val;
+      } else {
+        if (currentEmailField) val = currentEmailField.value.trim().toLowerCase();
+      }
+      
+      if (val && editBtn.visible_to.indexOf(val) === -1) {
+        editBtn.visible_to.push(val);
+        renderTab();
+        // Clear input appropriately after rendering Tab because DOM relies on IDs.
+        // But since we just rendered the tab entirely, we don't need to manually clear it,
+        // Because the next render will have empty fields for both f-email and f-team! 
+      }
+    });
+  }
 
   body.addEventListener('click', function(e) {
     var t = e.target.closest('[data-user-del]');
