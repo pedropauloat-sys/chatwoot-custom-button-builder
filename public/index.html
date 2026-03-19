@@ -57,6 +57,22 @@
   .perm-avatar.team{background:var(--success)}
   .perm-remove{background:transparent;border:none;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;width:18px;height:18px;transition:all .15s}
   .perm-remove:hover{background:var(--danger);color:#fff}
+  .tree-select{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--input)}
+  .tree-group{border-bottom:1px solid var(--border)}
+  .tree-group:last-child{border-bottom:none}
+  .tree-group-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:background .15s;user-select:none}
+  .tree-group-header:hover{background:rgba(255,255,255,.04)}
+  .tree-group-header .tree-arrow{font-size:10px;color:var(--sub);transition:transform .2s;width:14px;text-align:center;flex-shrink:0}
+  .tree-group-header .tree-arrow.open{transform:rotate(90deg)}
+  .tree-group-header label{font-size:13px;font-weight:600;cursor:pointer;flex:1}
+  .tree-group-header .tree-count{font-size:11px;color:var(--sub);margin-left:auto}
+  .tree-members{padding:0 0 4px 0;display:none}
+  .tree-members.open{display:block}
+  .tree-member{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 38px;cursor:pointer;transition:background .15s;user-select:none}
+  .tree-member:hover{background:rgba(255,255,255,.04)}
+  .tree-member label{font-size:12px;cursor:pointer;color:var(--text)}
+  .tree-member .tree-member-email{font-size:11px;color:var(--sub);margin-left:4px}
+  .tree-check{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
   .user-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg3);border-radius:6px;border:1px solid var(--border);margin-bottom:4px}
   .user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
   .footer-count{font-size:11px;color:var(--sub)}
@@ -472,7 +488,6 @@ function renderCondicoes(body) {
 // ── Aba Exibição ──
 function renderExibicao(body) {
   var b = editBtn;
-  var usersHTML = '';
 
   var groupSet = {};
   for(var g=0; g<buttons.length; g++){
@@ -484,19 +499,21 @@ function renderExibicao(body) {
   }
   groupsHTML += '</datalist>';
 
+  // Build tags/pills for current selection
+  var tagsHTML = '';
   if (!b.visible_to || !b.visible_to.length) {
-    usersHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--sub);background:var(--bg3);border-radius:8px;border:1px dashed var(--border)">👁 Visível para todos</div>';
+    tagsHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--sub);background:var(--bg3);border-radius:8px;border:1px dashed var(--border)">👁 Visível para todos</div>';
   } else {
-    usersHTML = '<div style="display:flex;flex-wrap:wrap;">';
+    tagsHTML = '<div style="display:flex;flex-wrap:wrap;">';
     for (var i = 0; i < b.visible_to.length; i++) {
       var val = b.visible_to[i];
       var isTeam = val.startsWith('team:');
       var displayName = isTeam ? val.substring(5) : val;
       var iconStr = isTeam ? '👥' : displayName.substring(0,2).toUpperCase();
       var avatarClass = isTeam ? 'perm-avatar team' : 'perm-avatar';
-      usersHTML += '<div class="perm-item"><div class="' + avatarClass + '" style="font-size:'+(isTeam?'12px':'10px')+'">' + iconStr + '</div><span>' + displayName + '</span><button class="perm-remove" data-user-del="' + i + '">✕</button></div>';
+      tagsHTML += '<div class="perm-item"><div class="' + avatarClass + '" style="font-size:'+(isTeam?'12px':'10px')+'">' + iconStr + '</div><span>' + displayName + '</span><button class="perm-remove" data-user-del="' + i + '">✕</button></div>';
     }
-    usersHTML += '</div>';
+    tagsHTML += '</div>';
   }
 
   body.innerHTML =
@@ -504,59 +521,180 @@ function renderExibicao(body) {
     '<div class="checkbox-item"><input type="checkbox" id="f-dynamic"' + (b.dynamic?' checked':'') + '><div><label for="f-dynamic">Botão dinâmico</label><div class="hint">Ocultado por padrão, aparece via triggers</div></div></div>' +
     '<div class="checkbox-item"><input type="checkbox" id="f-single"' + (b.single_use?' checked':'') + '><div><label for="f-single">Botão de uso único</label><div class="hint">Desativa após o primeiro clique</div></div></div>' +
     '<div style="margin-top:16px"><label class="form-label">Exibir para (vazio = todos)</label></div>' +
-    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
-      '<select class="form-select" id="f-perm-type" style="width: 110px;"><option value="user">Usuário</option><option value="team">Time</option></select>' +
-      '<input class="form-input" id="f-email" placeholder="nome@usebrk.com.br" style="flex:1">' +
-      '<input class="form-input hidden" id="f-team" placeholder="Nome do time (ex: vendas)" style="flex:1">' +
-      '<button class="btn btn-primary" id="btn-add-user">+ Adicionar</button>' +
-    '</div>' +
-    '<div id="users-list">' + usersHTML + '</div>';
+    '<div class="form-hint" style="margin-bottom:10px">Marque times inteiros ou membros individuais. Deixe tudo desmarcado para todos verem.</div>' +
+    '<div id="tree-select-container" class="tree-select"><div style="padding:20px;text-align:center;color:var(--sub);font-size:12px">⏳ Carregando times e agentes...</div></div>' +
+    '<div style="margin-top:12px" id="perm-tags">' + tagsHTML + '</div>';
 
-  var permTypeSelect = document.getElementById('f-perm-type');
-  var fTeam = document.getElementById('f-team');
-  var addUserBtn = document.getElementById('btn-add-user');
-
-  if (permTypeSelect) {
-    permTypeSelect.addEventListener('change', function(e) {
-      var currentEmailField = document.getElementById('f-email');
-      var currentTeamField = document.getElementById('f-team');
-      if (e.target.value === 'team') {
-        if (currentEmailField) currentEmailField.classList.add('hidden');
-        if (currentTeamField) currentTeamField.classList.remove('hidden');
-      } else {
-        if (currentEmailField) currentEmailField.classList.remove('hidden');
-        if (currentTeamField) currentTeamField.classList.add('hidden');
-      }
-    });
-  }
-
-  if (addUserBtn) {
-    addUserBtn.addEventListener('click', function() {
-      var type = permTypeSelect ? permTypeSelect.value : 'user';
-      var currentEmailField = document.getElementById('f-email');
-      var currentTeamField = document.getElementById('f-team');
-      var val = '';
-      
-      if (type === 'team') {
-        if (currentTeamField) val = currentTeamField.value.trim().toLowerCase();
-        if (val && !val.startsWith('team:')) val = 'team:' + val;
-      } else {
-        if (currentEmailField) val = currentEmailField.value.trim().toLowerCase();
-      }
-      
-      if (val && editBtn.visible_to.indexOf(val) === -1) {
-        editBtn.visible_to.push(val);
-        renderTab();
-        // Clear input appropriately after rendering Tab because DOM relies on IDs.
-        // But since we just rendered the tab entirely, we don't need to manually clear it,
-        // Because the next render will have empty fields for both f-email and f-team! 
-      }
-    });
+  // Populate tree if data already cached
+  if (window.__brkCachedTeams && window.__brkCachedAgents) {
+    buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
   }
 
   body.addEventListener('click', function(e) {
     var t = e.target.closest('[data-user-del]');
     if (t) { editBtn.visible_to.splice(parseInt(t.getAttribute('data-user-del')), 1); renderTab(); }
+  });
+}
+
+function buildTree(teams, agents) {
+  var container = document.getElementById('tree-select-container');
+  if (!container) return;
+  var b = editBtn;
+  if (!b) return;
+
+  // Find agents that don't belong to any team
+  var assignedEmails = {};
+  for (var t = 0; t < teams.length; t++) {
+    var members = teams[t].members || [];
+    for (var m = 0; m < members.length; m++) {
+      if (members[m].email) assignedEmails[members[m].email.toLowerCase()] = true;
+    }
+  }
+  var unassigned = [];
+  for (var a = 0; a < agents.length; a++) {
+    if (agents[a].email && !assignedEmails[agents[a].email.toLowerCase()]) {
+      unassigned.push(agents[a]);
+    }
+  }
+
+  var html = '';
+
+  // Render each team
+  for (var t = 0; t < teams.length; t++) {
+    var team = teams[t];
+    var teamVal = 'team:' + team.name.toLowerCase();
+    var members = team.members || [];
+    var teamChecked = b.visible_to.indexOf(teamVal) !== -1;
+    // Count individually checked members
+    var checkedMembers = 0;
+    for (var m = 0; m < members.length; m++) {
+      if (members[m].email && b.visible_to.indexOf(members[m].email.toLowerCase()) !== -1) checkedMembers++;
+    }
+    var allMembersChecked = members.length > 0 && (teamChecked || checkedMembers === members.length);
+    var someMembersChecked = !allMembersChecked && checkedMembers > 0;
+
+    html += '<div class="tree-group" data-team-idx="' + t + '">';
+    html += '<div class="tree-group-header">';
+    html += '<span class="tree-arrow">▶</span>';
+    html += '<input type="checkbox" class="tree-check" data-team-check="' + t + '"' + (allMembersChecked || teamChecked ? ' checked' : '') + '>';
+    html += '<label>👥 ' + team.name + '</label>';
+    html += '<span class="tree-count">' + members.length + ' membros</span>';
+    html += '</div>';
+    html += '<div class="tree-members">';
+    for (var m = 0; m < members.length; m++) {
+      var mb = members[m];
+      var email = (mb.email || '').toLowerCase();
+      var memberChecked = teamChecked || b.visible_to.indexOf(email) !== -1;
+      html += '<div class="tree-member">';
+      html += '<input type="checkbox" class="tree-check" data-member-email="' + email + '" data-team-parent="' + t + '"' + (memberChecked ? ' checked' : '') + '>';
+      html += '<label>' + (mb.name || mb.email) + '</label>';
+      if (mb.name && mb.email) html += '<span class="tree-member-email">(' + mb.email + ')</span>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Render unassigned agents
+  if (unassigned.length > 0) {
+    html += '<div class="tree-group" data-team-idx="none">';
+    html += '<div class="tree-group-header">';
+    html += '<span class="tree-arrow">▶</span>';
+    html += '<input type="checkbox" class="tree-check" data-team-check="none" style="visibility:hidden">';
+    html += '<label>👤 Sem time</label>';
+    html += '<span class="tree-count">' + unassigned.length + ' membros</span>';
+    html += '</div>';
+    html += '<div class="tree-members">';
+    for (var u = 0; u < unassigned.length; u++) {
+      var ua = unassigned[u];
+      var email = (ua.email || '').toLowerCase();
+      var uChecked = b.visible_to.indexOf(email) !== -1;
+      html += '<div class="tree-member">';
+      html += '<input type="checkbox" class="tree-check" data-member-email="' + email + '" data-team-parent="none"' + (uChecked ? ' checked' : '') + '>';
+      html += '<label>' + (ua.name || ua.email) + '</label>';
+      if (ua.name && ua.email) html += '<span class="tree-member-email">(' + ua.email + ')</span>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  if (!html) {
+    html = '<div style="padding:20px;text-align:center;color:var(--sub);font-size:12px">Nenhum agente ou time encontrado.</div>';
+  }
+
+  container.innerHTML = html;
+
+  // ── Event listeners ──
+  // Toggle expand/collapse
+  container.addEventListener('click', function(e) {
+    var header = e.target.closest('.tree-group-header');
+    if (header && !e.target.classList.contains('tree-check')) {
+      var arrow = header.querySelector('.tree-arrow');
+      var membersDiv = header.nextElementSibling;
+      if (membersDiv) {
+        var isOpen = membersDiv.classList.contains('open');
+        membersDiv.classList.toggle('open');
+        arrow.classList.toggle('open');
+      }
+    }
+  });
+
+  // Team checkbox
+  container.addEventListener('change', function(e) {
+    var target = e.target;
+    if (target.hasAttribute('data-team-check')) {
+      var tIdx = target.getAttribute('data-team-check');
+      if (tIdx === 'none') return; // "Sem time" group has no team checkbox logic
+      var team = teams[parseInt(tIdx)];
+      var teamVal = 'team:' + team.name.toLowerCase();
+      var members = team.members || [];
+
+      if (target.checked) {
+        // Add team if not present
+        if (b.visible_to.indexOf(teamVal) === -1) b.visible_to.push(teamVal);
+        // Remove individual members (team covers them)
+        for (var i = 0; i < members.length; i++) {
+          var em = (members[i].email || '').toLowerCase();
+          var idx = b.visible_to.indexOf(em);
+          if (idx !== -1) b.visible_to.splice(idx, 1);
+        }
+      } else {
+        // Remove team
+        var idx = b.visible_to.indexOf(teamVal);
+        if (idx !== -1) b.visible_to.splice(idx, 1);
+      }
+      renderTab();
+      // Re-populate tree
+      if (window.__brkCachedTeams && window.__brkCachedAgents) buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
+    }
+
+    if (target.hasAttribute('data-member-email')) {
+      var email = target.getAttribute('data-member-email');
+      var parentIdx = target.getAttribute('data-team-parent');
+
+      if (target.checked) {
+        if (b.visible_to.indexOf(email) === -1) b.visible_to.push(email);
+      } else {
+        var idx = b.visible_to.indexOf(email);
+        if (idx !== -1) b.visible_to.splice(idx, 1);
+        // If team was checked, uncheck it and add all OTHER members individually
+        if (parentIdx !== 'none') {
+          var team = teams[parseInt(parentIdx)];
+          var teamVal = 'team:' + team.name.toLowerCase();
+          var teamIdx = b.visible_to.indexOf(teamVal);
+          if (teamIdx !== -1) {
+            b.visible_to.splice(teamIdx, 1);
+            // Add remaining members individually
+            var members = team.members || [];
+            for (var i = 0; i < members.length; i++) {
+              var em = (members[i].email || '').toLowerCase();
+              if (em !== email && b.visible_to.indexOf(em) === -1) b.visible_to.push(em);
+            }
+          }
+        }
+      }
+      renderTab();
+      if (window.__brkCachedTeams && window.__brkCachedAgents) buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
+    }
   });
 }
 
@@ -588,82 +726,43 @@ load();
 </script>
  <script>
     // =======================================================
-    // INTEGRAÇÃO: Transforma input de email e time em Dropdowns do Chatwoot
+    // INTEGRAÇÃO: Recebe agentes e times do Chatwoot e popula tree-select
     // =======================================================
     (function() {
-        var cachedAgents = [];
-        var cachedTeams = [];
+        window.__brkCachedAgents = [];
+        window.__brkCachedTeams = [];
         
         // Pede a lista ao Chatwoot logo que abre
         window.parent.postMessage({ action: 'GET_AGENTS' }, '*');
         window.parent.postMessage({ action: 'GET_TEAMS' }, '*');
         
-        // Quando o Chatwoot responder, guarda a lista e popula
+        // Quando o Chatwoot responder, guarda a lista e tenta popular a árvore
         window.addEventListener('message', function(e) {
             if (e.data && e.data.action === 'SET_AGENTS') {
-                cachedAgents = e.data.agents || [];
-                populateSelect();
+                window.__brkCachedAgents = e.data.agents || [];
+                tryBuildTree();
             }
             if (e.data && e.data.action === 'SET_TEAMS') {
-                cachedTeams = e.data.teams || [];
-                populateTeamSelect();
+                window.__brkCachedTeams = e.data.teams || [];
+                tryBuildTree();
             }
         });
 
-        function populateSelect() {
-            var select = document.querySelector('select[data-chatwoot-agents="true"]');
-            if (select && cachedAgents.length > 0 && select.options.length <= 1) {
-                var options = '<option value="">Selecione um usuário...</option>';
-                cachedAgents.forEach(function(a) {
-                    options += '<option value="' + a.email + '">' + a.name + ' (' + a.email + ')</option>';
-                });
-                select.innerHTML = options;
+        function tryBuildTree() {
+            if (window.__brkCachedTeams.length > 0 && window.__brkCachedAgents.length > 0) {
+                if (typeof buildTree === 'function') {
+                    buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
+                }
             }
         }
 
-        function populateTeamSelect() {
-            var select = document.querySelector('select[data-chatwoot-teams="true"]');
-            if (select && cachedTeams.length > 0 && select.options.length <= 1) {
-                var options = '<option value="">Selecione um time...</option>';
-                cachedTeams.forEach(function(t) {
-                    options += '<option value="' + t.name + '">' + t.name + '</option>';
-                });
-                select.innerHTML = options;
-            }
-        }
-
-        // Fica de olho na tela: sempre que o Modal abrir, injeta
+        // Observer: quando a tree-select container aparecer, tenta popular
         var observer = new MutationObserver(function() {
-            // Input Usuarios
-            var oldInput = document.querySelector('input[placeholder="nome@usebrk.com.br"]');
-            if (oldInput && oldInput.tagName === 'INPUT') {
-                var select = document.createElement('select');
-                select.id = oldInput.id; 
-                select.className = oldInput.className;
-                select.style.cssText = oldInput.style.cssText;
-                select.style.appearance = 'auto';
-                select.style.cursor = 'pointer';
-                select.setAttribute('data-chatwoot-agents', 'true');
-                select.innerHTML = '<option value="">Carregando usuários do Chatwoot...</option>';
-                
-                oldInput.parentNode.replaceChild(select, oldInput);
-                populateSelect();
-            }
-            
-            // Input Times
-            var oldTeamInput = document.querySelector('input[placeholder="Nome do time (ex: vendas)"]');
-            if (oldTeamInput && oldTeamInput.tagName === 'INPUT') {
-                var selectTeam = document.createElement('select');
-                selectTeam.id = oldTeamInput.id; 
-                selectTeam.className = oldTeamInput.className;
-                selectTeam.style.cssText = oldTeamInput.style.cssText;
-                selectTeam.style.appearance = 'auto';
-                selectTeam.style.cursor = 'pointer';
-                selectTeam.setAttribute('data-chatwoot-teams', 'true');
-                selectTeam.innerHTML = '<option value="">Carregando times do Chatwoot...</option>';
-                
-                oldTeamInput.parentNode.replaceChild(selectTeam, oldTeamInput);
-                populateTeamSelect();
+            var treeContainer = document.getElementById('tree-select-container');
+            if (treeContainer && window.__brkCachedTeams.length > 0 && window.__brkCachedAgents.length > 0) {
+                if (typeof buildTree === 'function') {
+                    buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
+                }
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });

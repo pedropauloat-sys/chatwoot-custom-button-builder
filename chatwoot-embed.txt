@@ -141,6 +141,17 @@
                     });
                     if (resTeams.ok) {
                         const dataTeams = await resTeams.json();
+                        // Enriquece cada time com seus membros
+                        for (var ti = 0; ti < dataTeams.length; ti++) {
+                            try {
+                                var resMembers = await fetch('/api/v1/accounts/' + accountId + '/teams/' + dataTeams[ti].id + '/team_members', {
+                                    headers: { 'access-token': auth['access-token'], 'client': auth['client'], 'uid': auth['uid'] }
+                                });
+                                if (resMembers.ok) {
+                                    dataTeams[ti].members = await resMembers.json();
+                                } else { dataTeams[ti].members = []; }
+                            } catch(err) { dataTeams[ti].members = []; }
+                        }
                         const iframe = document.getElementById('brk-mgr-iframe');
                         if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage({ action: 'SET_TEAMS', teams: dataTeams }, '*');
                     }
