@@ -546,6 +546,15 @@ function buildTree(teams, agents) {
   // Mark as built so MutationObserver doesn't re-trigger
   window.__brkTreeBuilt = true;
 
+  // Save which groups are currently open
+  var openGroups = {};
+  var existingGroups = container.querySelectorAll('.tree-group');
+  for (var og = 0; og < existingGroups.length; og++) {
+    var idx = existingGroups[og].getAttribute('data-team-idx');
+    var membersDiv = existingGroups[og].querySelector('.tree-members');
+    if (membersDiv && membersDiv.classList.contains('open')) openGroups[idx] = true;
+  }
+
   // Find agents that don't belong to any team
   var assignedEmails = {};
   for (var t = 0; t < teams.length; t++) {
@@ -569,22 +578,21 @@ function buildTree(teams, agents) {
     var teamVal = 'team:' + team.name.toLowerCase();
     var members = team.members || [];
     var teamChecked = b.visible_to.indexOf(teamVal) !== -1;
-    // Count individually checked members
     var checkedMembers = 0;
     for (var m = 0; m < members.length; m++) {
       if (members[m].email && b.visible_to.indexOf(members[m].email.toLowerCase()) !== -1) checkedMembers++;
     }
     var allMembersChecked = members.length > 0 && (teamChecked || checkedMembers === members.length);
-    var someMembersChecked = !allMembersChecked && checkedMembers > 0;
+    var isOpen = openGroups[String(t)];
 
     html += '<div class="tree-group" data-team-idx="' + t + '">';
     html += '<div class="tree-group-header">';
-    html += '<span class="tree-arrow">▶</span>';
+    html += '<span class="tree-arrow' + (isOpen ? ' open' : '') + '">▶</span>';
     html += '<input type="checkbox" class="tree-check" data-team-check="' + t + '"' + (allMembersChecked || teamChecked ? ' checked' : '') + '>';
     html += '<label>👥 ' + team.name + '</label>';
     html += '<span class="tree-count">' + members.length + ' membros</span>';
     html += '</div>';
-    html += '<div class="tree-members">';
+    html += '<div class="tree-members' + (isOpen ? ' open' : '') + '">';
     for (var m = 0; m < members.length; m++) {
       var mb = members[m];
       var email = (mb.email || '').toLowerCase();
@@ -600,14 +608,15 @@ function buildTree(teams, agents) {
 
   // Render unassigned agents
   if (unassigned.length > 0) {
+    var isOpenNone = openGroups['none'];
     html += '<div class="tree-group" data-team-idx="none">';
     html += '<div class="tree-group-header">';
-    html += '<span class="tree-arrow">▶</span>';
+    html += '<span class="tree-arrow' + (isOpenNone ? ' open' : '') + '">▶</span>';
     html += '<input type="checkbox" class="tree-check" data-team-check="none" style="visibility:hidden">';
     html += '<label>👤 Sem time</label>';
     html += '<span class="tree-count">' + unassigned.length + ' membros</span>';
     html += '</div>';
-    html += '<div class="tree-members">';
+    html += '<div class="tree-members' + (isOpenNone ? ' open' : '') + '">';
     for (var u = 0; u < unassigned.length; u++) {
       var ua = unassigned[u];
       var email = (ua.email || '').toLowerCase();
@@ -627,79 +636,105 @@ function buildTree(teams, agents) {
 
   container.innerHTML = html;
 
-  // ── Event listeners ──
-  // Toggle expand/collapse
-  container.addEventListener('click', function(e) {
-    var header = e.target.closest('.tree-group-header');
-    if (header && !e.target.classList.contains('tree-check')) {
-      var arrow = header.querySelector('.tree-arrow');
-      var membersDiv = header.nextElementSibling;
-      if (membersDiv) {
-        var isOpen = membersDiv.classList.contains('open');
-        membersDiv.classList.toggle('open');
-        arrow.classList.toggle('open');
-      }
-    }
-  });
+  // ── Attach event listeners ONLY ONCE ──
+  if (!container.getAttribute('data-tree-bound')) {
+    container.setAttribute('data-tree-bound', 'true');
 
-  // Team checkbox
-  container.addEventListener('change', function(e) {
-    var target = e.target;
-    if (target.hasAttribute('data-team-check')) {
-      var tIdx = target.getAttribute('data-team-check');
-      if (tIdx === 'none') return; // "Sem time" group has no team checkbox logic
-      var team = teams[parseInt(tIdx)];
-      var teamVal = 'team:' + team.name.toLowerCase();
-      var members = team.members || [];
-
-      if (target.checked) {
-        // Add team if not present
-        if (b.visible_to.indexOf(teamVal) === -1) b.visible_to.push(teamVal);
-        // Remove individual members (team covers them)
-        for (var i = 0; i < members.length; i++) {
-          var em = (members[i].email || '').toLowerCase();
-          var idx = b.visible_to.indexOf(em);
-          if (idx !== -1) b.visible_to.splice(idx, 1);
+    // Toggle expand/collapse
+    container.addEventListener('click', function(e) {
+      var header = e.target.closest('.tree-group-header');
+      if (header && !e.target.classList.contains('tree-check')) {
+        var arrow = header.querySelector('.tree-arrow');
+        var membersDiv = header.nextElementSibling;
+        if (membersDiv) {
+          membersDiv.classList.toggle('open');
+          arrow.classList.toggle('open');
         }
-      } else {
-        // Remove team
-        var idx = b.visible_to.indexOf(teamVal);
-        if (idx !== -1) b.visible_to.splice(idx, 1);
       }
-      renderTab();
-      // Re-populate tree
-      if (window.__brkCachedTeams && window.__brkCachedAgents) buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
-    }
+    });
 
-    if (target.hasAttribute('data-member-email')) {
-      var email = target.getAttribute('data-member-email');
-      var parentIdx = target.getAttribute('data-team-parent');
+    // Checkbox changes
+    container.addEventListener('change', function(e) {
+      var target = e.target;
+      var currentBtn = editBtn;
+      if (!currentBtn) return;
+      var curTeams = window.__brkCachedTeams || [];
 
-      if (target.checked) {
-        if (b.visible_to.indexOf(email) === -1) b.visible_to.push(email);
-      } else {
-        var idx = b.visible_to.indexOf(email);
-        if (idx !== -1) b.visible_to.splice(idx, 1);
-        // If team was checked, uncheck it and add all OTHER members individually
-        if (parentIdx !== 'none') {
-          var team = teams[parseInt(parentIdx)];
-          var teamVal = 'team:' + team.name.toLowerCase();
-          var teamIdx = b.visible_to.indexOf(teamVal);
-          if (teamIdx !== -1) {
-            b.visible_to.splice(teamIdx, 1);
-            // Add remaining members individually
-            var members = team.members || [];
-            for (var i = 0; i < members.length; i++) {
-              var em = (members[i].email || '').toLowerCase();
-              if (em !== email && b.visible_to.indexOf(em) === -1) b.visible_to.push(em);
+      if (target.hasAttribute('data-team-check')) {
+        var tIdx = target.getAttribute('data-team-check');
+        if (tIdx === 'none') return;
+        var team = curTeams[parseInt(tIdx)];
+        if (!team) return;
+        var teamVal = 'team:' + team.name.toLowerCase();
+        var members = team.members || [];
+
+        if (target.checked) {
+          if (currentBtn.visible_to.indexOf(teamVal) === -1) currentBtn.visible_to.push(teamVal);
+          for (var i = 0; i < members.length; i++) {
+            var em = (members[i].email || '').toLowerCase();
+            var idx = currentBtn.visible_to.indexOf(em);
+            if (idx !== -1) currentBtn.visible_to.splice(idx, 1);
+          }
+        } else {
+          var idx = currentBtn.visible_to.indexOf(teamVal);
+          if (idx !== -1) currentBtn.visible_to.splice(idx, 1);
+        }
+        updatePermTags(currentBtn);
+        buildTree(curTeams, window.__brkCachedAgents || []);
+      }
+
+      if (target.hasAttribute('data-member-email')) {
+        var email = target.getAttribute('data-member-email');
+        var parentIdx = target.getAttribute('data-team-parent');
+
+        if (target.checked) {
+          if (currentBtn.visible_to.indexOf(email) === -1) currentBtn.visible_to.push(email);
+        } else {
+          var idx = currentBtn.visible_to.indexOf(email);
+          if (idx !== -1) currentBtn.visible_to.splice(idx, 1);
+          if (parentIdx !== 'none') {
+            var team = curTeams[parseInt(parentIdx)];
+            if (team) {
+              var teamVal = 'team:' + team.name.toLowerCase();
+              var teamIdx = currentBtn.visible_to.indexOf(teamVal);
+              if (teamIdx !== -1) {
+                currentBtn.visible_to.splice(teamIdx, 1);
+                var members = team.members || [];
+                for (var i = 0; i < members.length; i++) {
+                  var em = (members[i].email || '').toLowerCase();
+                  if (em !== email && currentBtn.visible_to.indexOf(em) === -1) currentBtn.visible_to.push(em);
+                }
+              }
             }
           }
         }
+        updatePermTags(currentBtn);
+        buildTree(curTeams, window.__brkCachedAgents || []);
       }
-      renderTab();
-      if (window.__brkCachedTeams && window.__brkCachedAgents) buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
+    });
+  }
+}
+
+// Update only the tags/pills area without full tab re-render
+function updatePermTags(b) {
+  var tagsContainer = document.getElementById('perm-tags');
+  if (!tagsContainer) return;
+  var tagsHTML = '';
+  if (!b.visible_to || !b.visible_to.length) {
+    tagsHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--sub);background:var(--bg3);border-radius:8px;border:1px dashed var(--border)">👁 Visível para todos</div>';
+  } else {
+    tagsHTML = '<div style="display:flex;flex-wrap:wrap;">';
+    for (var i = 0; i < b.visible_to.length; i++) {
+      var val = b.visible_to[i];
+      var isTeam = val.startsWith('team:');
+      var displayName = isTeam ? val.substring(5) : val;
+      var iconStr = isTeam ? '👥' : displayName.substring(0,2).toUpperCase();
+      var avatarClass = isTeam ? 'perm-avatar team' : 'perm-avatar';
+      tagsHTML += '<div class="perm-item"><div class="' + avatarClass + '" style="font-size:'+(isTeam?'12px':'10px')+'">' + iconStr + '</div><span>' + displayName + '</span><button class="perm-remove" data-user-del="' + i + '">✕</button></div>';
     }
-  });
+    tagsHTML += '</div>';
+  }
+  tagsContainer.innerHTML = tagsHTML;
 }
 
 // ── Save ──
