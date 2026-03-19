@@ -527,6 +527,7 @@ function renderExibicao(body) {
 
   // Populate tree if data already cached
   if (window.__brkCachedTeams && window.__brkCachedAgents) {
+    window.__brkTreeBuilt = false;
     buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
   }
 
@@ -541,6 +542,9 @@ function buildTree(teams, agents) {
   if (!container) return;
   var b = editBtn;
   if (!b) return;
+
+  // Mark as built so MutationObserver doesn't re-trigger
+  window.__brkTreeBuilt = true;
 
   // Find agents that don't belong to any team
   var assignedEmails = {};
@@ -731,6 +735,7 @@ load();
     (function() {
         window.__brkCachedAgents = [];
         window.__brkCachedTeams = [];
+        window.__brkTreeBuilt = false;
         
         // Pede a lista ao Chatwoot logo que abre
         window.parent.postMessage({ action: 'GET_AGENTS' }, '*');
@@ -740,17 +745,23 @@ load();
         window.addEventListener('message', function(e) {
             if (e.data && e.data.action === 'SET_AGENTS') {
                 window.__brkCachedAgents = e.data.agents || [];
+                window.__brkTreeBuilt = false;
                 tryBuildTree();
             }
             if (e.data && e.data.action === 'SET_TEAMS') {
                 window.__brkCachedTeams = e.data.teams || [];
+                window.__brkTreeBuilt = false;
                 tryBuildTree();
             }
         });
 
         function tryBuildTree() {
+            if (window.__brkTreeBuilt) return;
+            var container = document.getElementById('tree-select-container');
+            if (!container) return;
             if (window.__brkCachedTeams.length > 0 && window.__brkCachedAgents.length > 0) {
                 if (typeof buildTree === 'function') {
+                    window.__brkTreeBuilt = true;
                     buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
                 }
             }
@@ -758,11 +769,8 @@ load();
 
         // Observer: quando a tree-select container aparecer, tenta popular
         var observer = new MutationObserver(function() {
-            var treeContainer = document.getElementById('tree-select-container');
-            if (treeContainer && window.__brkCachedTeams.length > 0 && window.__brkCachedAgents.length > 0) {
-                if (typeof buildTree === 'function') {
-                    buildTree(window.__brkCachedTeams, window.__brkCachedAgents);
-                }
+            if (!window.__brkTreeBuilt) {
+                tryBuildTree();
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
