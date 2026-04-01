@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const { Pool } = require('pg');
 const fs = require('fs');
@@ -90,6 +91,20 @@ function serveStatic(res, filePath) {
 async function handleAPI(req, res, url, method) {
   cors(res);
   if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // Bloqueio de Segurança: Apenas botões ativos e cliques são públicos. O painel requer ADMIN_TOKEN.
+  const isPublicRoute = (url === '/api/buttons/active' && method === 'GET') || 
+                        (url === '/api/analytics/click' && method === 'POST');
+
+  if (!isPublicRoute) {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    // Se o ADMIN_TOKEN não estiver configurado no .env, libera o acesso (fallback inseguro)
+    // Recomendável configurar ADMIN_TOKEN o mais rápido possível
+    if (process.env.ADMIN_TOKEN && token !== process.env.ADMIN_TOKEN) {
+      return json(res, { error: 'Unauthorized' }, 401);
+    }
+  }
 
   // GET /api/buttons — lista todos os botões
   if (url === '/api/buttons' && method === 'GET') {

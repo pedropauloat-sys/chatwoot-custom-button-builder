@@ -80,7 +80,22 @@
 </style>
 </head>
 <body>
-<div class="container">
+<div id="login-overlay" class="modal-overlay hidden" style="z-index:99999">
+  <div class="modal" style="width:360px;margin:auto">
+    <div class="modal-header">
+      <h2 style="font-size:16px">🔒 Acesso Restrito</h2>
+    </div>
+    <div class="modal-body" style="padding:24px">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Senha de Administrador</label>
+        <input type="password" id="input-password" class="form-input" placeholder="••••••••" style="font-size:14px;padding:12px">
+      </div>
+      <button class="btn btn-primary" id="btn-login" style="width:100%;padding:12px">Acessar Painel</button>
+    </div>
+  </div>
+</div>
+
+<div class="container" id="main-container" style="display:none">
   <div class="header">
     <h1><em>⚡</em> BRK Button Manager <span class="badge">v1.0</span></h1>
     <div style="display:flex;gap:10px">
@@ -175,11 +190,52 @@ document.getElementById('btn-cancel').addEventListener('click', closeEditor);
 document.getElementById('btn-save').addEventListener('click', saveButton);
 document.getElementById('modal-overlay').addEventListener('click', function(e){ if(e.target===this) closeEditor(); });
 
+// ── Auth ──
+var adminToken = localStorage.getItem('brk_token') || '';
+
+if (!adminToken) {
+  document.getElementById('login-overlay').classList.remove('hidden');
+} else {
+  document.getElementById('main-container').style.display = 'block';
+}
+
+document.getElementById('btn-login').addEventListener('click', function() {
+  var pwd = document.getElementById('input-password').value;
+  if (!pwd) return;
+  adminToken = pwd;
+  localStorage.setItem('brk_token', pwd);
+  document.getElementById('login-overlay').classList.add('hidden');
+  document.getElementById('main-container').style.display = 'block';
+  load();
+});
+
+document.getElementById('input-password').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') document.getElementById('btn-login').click();
+});
+
 // ── API ──
 function api(path, method, body) {
-  var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+  var opts = { 
+    method: method || 'GET', 
+    headers: { 'Content-Type': 'application/json' } 
+  };
+  
+  if (adminToken) {
+    opts.headers['Authorization'] = 'Bearer ' + adminToken;
+  }
+  
   if (body) opts.body = JSON.stringify(body);
-  return fetch(API_URL + path, opts).then(function(r){ return r.json(); });
+  
+  return fetch(API_URL + path, opts).then(function(r) {
+    if (r.status === 401) {
+      localStorage.removeItem('brk_token');
+      adminToken = '';
+      document.getElementById('main-container').style.display = 'none';
+      document.getElementById('login-overlay').classList.remove('hidden');
+      throw new Error('Acesso não autorizado');
+    }
+    return r.json(); 
+  });
 }
 
 // ── Load ──
