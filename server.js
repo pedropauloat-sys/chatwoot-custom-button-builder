@@ -66,7 +66,17 @@ function json(res, data, status = 200) {
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', c => body += c);
+    let size = 0;
+    const maxSize = 102400; // Limite de 100KB do Payload
+    req.on('data', c => {
+      size += c.length;
+      if (size > maxSize) {
+        req.destroy();
+        reject(new Error('Payload too large'));
+        return;
+      }
+      body += c;
+    });
     req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch { resolve({}); } });
     req.on('error', reject);
   });
@@ -79,7 +89,15 @@ const MIME = { '.html':'text/html','.js':'application/javascript','.css':'text/c
 
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);
-  const full = path.join(__dirname, 'public', filePath);
+  // Proteção contra Path Traversal
+  const sanitizedPath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+  const publicDir = path.resolve(__dirname, 'public');
+  const full = path.resolve(publicDir, sanitizedPath);
+
+  if (!full.startsWith(publicDir)) {
+    res.writeHead(403); res.end('Forbidden'); return;
+  }
+
   if (!fs.existsSync(full)) { res.writeHead(404); res.end('Not found'); return; }
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'text/plain' });
   fs.createReadStream(full).pipe(res);
@@ -88,20 +106,42 @@ function serveStatic(res, filePath) {
 // ═══════════════════════════════════════════════════════════
 // API ROUTES
 // ═══════════════════════════════════════════════════════════
+
+// Rate Limiter em RAM Local (Proteção Anti-Spam e DOS)
+const hits = {};
+setInterval(() => { for (const k in hits) if (!hits[k].length) delete hits[k]; }, 300000);
+
+function checkRateLimit(ip, max = 120, windowMs = 60000) {
+  const now = Date.now();
+  if (!hits[ip]) hits[ip] = [];
+  hits[ip] = hits[ip].filter(t => now - t < windowMs);
+  if (hits[ip].length >= max) return false;
+  hits[ip].push(now);
+  return true;
+}
+
 async function handleAPI(req, res, url, method) {
   cors(res);
   if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  const clientIp = req.socket.remoteAddress || '127.0.0.1';
+  if (!checkRateLimit(clientIp)) {
+    return json(res, { error: 'Muitas requisições. Tente mais tarde.' }, 429);
+  }
 
   // Bloqueio de Segurança: Apenas botões ativos e cliques são públicos. O painel requer ADMIN_TOKEN.
   const isPublicRoute = (url === '/api/buttons/active' && method === 'GET') || 
                         (url === '/api/analytics/click' && method === 'POST');
 
   if (!isPublicRoute) {
+    if (!process.env.ADMIN_TOKEN) {
+      console.error('[SECURITY] ADMIN_TOKEN não configurado. API travada por segurança externa.');
+      return json(res, { error: 'Server misconfigured' }, 503);
+    }
+    
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace('Bearer ', '').trim();
-    // Se o ADMIN_TOKEN não estiver configurado no .env, libera o acesso (fallback inseguro)
-    // Recomendável configurar ADMIN_TOKEN o mais rápido possível
-    if (process.env.ADMIN_TOKEN && token !== process.env.ADMIN_TOKEN) {
+    if (token !== process.env.ADMIN_TOKEN) {
       return json(res, { error: 'Unauthorized' }, 401);
     }
   }
@@ -147,13 +187,24 @@ async function handleAPI(req, res, url, method) {
     return json(res, { data: rows });
   }
 
-  // POST /api/buttons/reorder — reordena
+  // POST /api/buttons/reorder — reordena com proteção de transação
   if (url === '/api/buttons/reorder' && method === 'POST') {
     const { order } = await parseBody(req);
-    if (Array.isArray(order)) {
+    if (!Array.isArray(order) || order.length > 200) {
+      return json(res, { error: 'Ordenação inválida' }, 400);
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
       for (let i = 0; i < order.length; i++) {
-        await pool.query('UPDATE brk_buttons SET sort_order=$1 WHERE id=$2', [i, order[i]]);
+        await client.query('UPDATE brk_buttons SET sort_order=$1 WHERE id=$2', [i, String(order[i])]);
       }
+      await client.query('COMMIT');
+    } catch(e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
     }
     return json(res, { success: true });
   }
@@ -246,8 +297,13 @@ const server = http.createServer(async (req, res) => {
       serveStatic(res, url);
     }
   } catch (err) {
-    console.error('[ERROR]', err);
-    json(res, { error: err.message }, 500);
+    if (err.message === 'Payload too large') {
+      json(res, { error: 'Objeto acima de 100KB não suportado' }, 413);
+    } else {
+      console.error('[SERVER ERROR]', err);
+      // Retorna erro genérico ocultando senhas e dados das queries (Vazamento Interno protegido)
+      json(res, { error: 'Internal Server Error' }, 500); 
+    }
   }
 });
 
