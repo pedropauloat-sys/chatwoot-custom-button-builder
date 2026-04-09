@@ -193,54 +193,28 @@
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // LOCALIZAÇÃO NO SIDEBAR
+  // ══════════════════════════════════════════════════════════════
   function findBlocoAcoes() {
-    function isVisible(el) {
-      if (!el) return false;
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return false;
-      const style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-      return true;
-    }
-
-    let nativo = document.querySelector('.conversation--actions');
-    if (nativo && isVisible(nativo)) return nativo;
-    
-    // Procura por textos de seções comuns no sidebar
-    const textos = document.querySelectorAll('span,div,p,h3,h4,strong,button,legend');
+    const nativo = document.querySelector('.conversation--actions');
+    if (nativo) return nativo;
+    const textos = document.querySelectorAll('span,div,p,h3,h4,strong');
     for (let i = 0; i < textos.length; i++) {
-        if (!isVisible(textos[i])) continue; // Ignora elementos em drawers mobile ocultos!
-        if (textos[i].children.length > 1) continue; // Ignora wrappers com muitos filhos
-        
-        const t = (textos[i].textContent || '').trim().toLowerCase();
-        if (t === 'ações da conversa' || t === 'conversation actions' || t === 'agente atribuído' || t === 'assigned agent') {
+        const t = (textos[i].textContent||'').trim().toLowerCase();
+        if ((t === 'ações da conversa' || t === 'conversation actions')) {
             let parent = textos[i].parentElement;
-            for (let j = 0; j < 8; j++) {
-                if (!parent) break;
-                
-                if (parent.tagName === 'SECTION' || 
-                    parent.classList.contains('border-b') || 
-                    parent.classList.contains('mb-4') || 
-                    parent.classList.contains('conversation--actions') ||
-                    (parent.parentElement && parent.parentElement.classList.contains('flex-col') && parent.parentElement.tagName !== 'BUTTON')) {
-                    if (isVisible(parent)) return parent;
+            for (let j = 0; j < 6; j++) {
+                if (parent && (parent.classList.contains('border-b') || parent.tagName === 'SECTION' || parent.classList.contains('mb-4') || parent.style.borderRadius || parent.classList.contains('conversation--actions'))) {
+                    return parent;
                 }
-                parent = parent.parentElement;
+                parent = parent ? parent.parentElement : null;
             }
-            if (textos[i].parentElement && textos[i].parentElement.parentElement && isVisible(textos[i].parentElement.parentElement)) {
-                return textos[i].parentElement.parentElement;
+            if (textos[i].parentElement && textos[i].parentElement.parentElement) {
+                return textos[i].parentElement.parentElement.parentElement;
             }
         }
     }
-    
-    // Fallback absoluto: tenta achar o wrapper principal do sidebar
-    const wrappers = document.querySelectorAll('.conversation-settings, [data-testid="conversation-sidebar"], .conversation-sidebar-wrap');
-    for (let w = 0; w < wrappers.length; w++) {
-        if (isVisible(wrappers[w]) && wrappers[w].firstElementChild) {
-           return wrappers[w].children.length > 1 ? wrappers[w].children[1] : wrappers[w].firstElementChild;
-        }
-    }
-    
     return null;
   }
 
@@ -327,11 +301,15 @@
     }
 
     const blocoAcoes = findBlocoAcoes();
+    if(!blocoAcoes || !blocoAcoes.parentElement) {
+      document.getElementById('brk-widget-wrap')?.remove();
+      return false;
+    }
 
     let existingAccordion = document.getElementById('brk-widget-wrap');
     if (existingAccordion) {
-        if (blocoAcoes && existingAccordion.nextElementSibling === blocoAcoes) {
-            return true; // Já está no lugar certo
+        if (existingAccordion.nextElementSibling === blocoAcoes) {
+            return true;
         } else {
             existingAccordion.remove();
         }
@@ -388,23 +366,7 @@
     renderGrp(null, noGroup);
     Object.keys(grouped).forEach(g => renderGrp(g, grouped[g]));
 
-    // Attach strategy (Garante que vai aparecer em algum lugar)
-    if (blocoAcoes && blocoAcoes.parentElement) {
-        blocoAcoes.parentElement.insertBefore(accordion, blocoAcoes);
-    } else {
-        const rs = document.querySelector('.conversation-settings, [data-testid="conversation-sidebar"], .conversation-sidebar-wrap');
-        if (rs) {
-           rs.appendChild(accordion);
-        } else {
-           accordion.style.position = 'fixed';
-           accordion.style.bottom = '20px';
-           accordion.style.right = '20px';
-           accordion.style.zIndex = '999999';
-           accordion.style.width = '300px';
-           document.body.appendChild(accordion);
-           console.warn('[BRK Widget] Ancorado como Flutuante porque o Sidebar não foi localizado.');
-        }
-    }
+    blocoAcoes.parentElement.insertBefore(accordion, blocoAcoes);
 
     accordion.querySelector('#brk-w-toggle').addEventListener('click', () => {
         const ic = accordion.querySelector('#brk-w-icon');
