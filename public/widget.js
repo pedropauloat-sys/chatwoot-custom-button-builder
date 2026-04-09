@@ -193,22 +193,28 @@
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // LOCALIZAÇÃO NO SIDEBAR
-  // ══════════════════════════════════════════════════════════════
   function findBlocoAcoes() {
-    const nativo = document.querySelector('.conversation--actions');
-    if (nativo) return nativo;
+    function isVisible(el) {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+      return true;
+    }
+
+    let nativo = document.querySelector('.conversation--actions');
+    if (nativo && isVisible(nativo)) return nativo;
     
     // Procura por textos de seções comuns no sidebar
     const textos = document.querySelectorAll('span,div,p,h3,h4,strong,button,legend');
     for (let i = 0; i < textos.length; i++) {
+        if (!isVisible(textos[i])) continue; // Ignora elementos em drawers mobile ocultos!
         if (textos[i].children.length > 1) continue; // Ignora wrappers com muitos filhos
         
         const t = (textos[i].textContent || '').trim().toLowerCase();
         if (t === 'ações da conversa' || t === 'conversation actions' || t === 'agente atribuído' || t === 'assigned agent') {
             let parent = textos[i].parentElement;
-            // Tenta subir no DOM até achar a raiz do componente (Accordion ou Section)
             for (let j = 0; j < 8; j++) {
                 if (!parent) break;
                 
@@ -216,23 +222,23 @@
                     parent.classList.contains('border-b') || 
                     parent.classList.contains('mb-4') || 
                     parent.classList.contains('conversation--actions') ||
-                    (parent.parentElement && parent.parentElement.classList.contains('flex-col'))) {
-                    return parent;
+                    (parent.parentElement && parent.parentElement.classList.contains('flex-col') && parent.parentElement.tagName !== 'BUTTON')) {
+                    if (isVisible(parent)) return parent;
                 }
                 parent = parent.parentElement;
             }
-            // Fallback se não encontrou um pai estrutural óbvio
-            if (textos[i].parentElement && textos[i].parentElement.parentElement) {
+            if (textos[i].parentElement && textos[i].parentElement.parentElement && isVisible(textos[i].parentElement.parentElement)) {
                 return textos[i].parentElement.parentElement;
             }
         }
     }
     
     // Fallback absoluto: tenta achar o wrapper principal do sidebar
-    const rightSidebar = document.querySelector('.conversation-settings, [data-testid="conversation-sidebar"], .conversation-sidebar-wrap');
-    if (rightSidebar && rightSidebar.firstElementChild) {
-       // pula o primeiro card (perfil) e insere depois
-       return rightSidebar.children.length > 1 ? rightSidebar.children[1] : rightSidebar.firstElementChild;
+    const wrappers = document.querySelectorAll('.conversation-settings, [data-testid="conversation-sidebar"], .conversation-sidebar-wrap');
+    for (let w = 0; w < wrappers.length; w++) {
+        if (isVisible(wrappers[w]) && wrappers[w].firstElementChild) {
+           return wrappers[w].children.length > 1 ? wrappers[w].children[1] : wrappers[w].firstElementChild;
+        }
     }
     
     return null;
